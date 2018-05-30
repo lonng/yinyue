@@ -1,0 +1,6 @@
+[package]
+name = "yinyue"
+version = "0.1.0"
+authors = ["Chris Lonng <chris@lonng.org>"]
+
+[dependencies]
