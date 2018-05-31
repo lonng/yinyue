@@ -3,14 +3,29 @@ extern crate url;
 pub struct Song {}
 
 pub trait Adapter {
-    fn song_list(&self) -> Result<Vec<Song>, Error>;
+    fn song_list(&self) -> Result<Vec<Song>, APIError>;
 }
 
-pub enum Error {}
+pub enum APIError {
+    UrlParseError,
+    AdapterNotFound
+}
 
-pub fn parse_adapter(rawurl: String) -> Result<Box<Adapter>, Error> {
-    //let result = url::Url::parse(rawurl.as_str())?;
-    Ok(Box::new(SongAdapter{id: "1000".to_string()}))
+pub fn parse_adapter(rawurl: &str) -> Result<Box<Adapter>, APIError> {
+    let result = url::Url::parse(rawurl);
+    if result.is_err() {
+        return Err(APIError::UrlParseError)
+    }
+
+    let url_data = result.unwrap();
+    let path = url_data.path();
+    let slash_index = path.rfind("/").unwrap();
+    let adapter_name = &path[(slash_index+1)..];
+
+    match adapter_name {
+        "song" => Ok(Box::new(SongAdapter{id: "1000".to_string()})),
+        _ => Err(APIError::AdapterNotFound)
+    }
 }
 
 struct SongAdapter {
@@ -18,7 +33,7 @@ struct SongAdapter {
 }
 
 impl Adapter for SongAdapter {
-    fn song_list(&self) -> Result<Vec<Song>, Error> {
+    fn song_list(&self) -> Result<Vec<Song>, APIError> {
         unimplemented!()
     }
 }

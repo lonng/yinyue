@@ -1,2 +1,2 @@
-mod api;
-mod crypto;
+pub mod api;
+pub mod crypto;
