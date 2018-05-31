@@ -1,5 +1,6 @@
 extern crate yinyue;
 extern crate getopts;
+extern crate reqwest;
 
 use yinyue::api;
 use getopts::Options;
@@ -7,6 +8,7 @@ use std::env;
 use std::process;
 use std::path::Path;
 use std::fs;
+use std::fs::File;
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options] url", program);
@@ -85,6 +87,7 @@ fn main() {
     let total = song_list.len();
     println!("Fetching song list completed, total amount: {}", total);
 
+    let target_dir = Path::new(&dir);
     for (i, song) in song_list.iter().enumerate() {
         println!("Parse song download info: {}", song.to_string());
         let download_url = match typ.as_str() {
@@ -117,8 +120,34 @@ fn main() {
         };
         let filename = format!("{}{}", song.file_name(&fmt),extension);
         println!("Downloading: [{}/{}]{}", i+1, total, filename);
-//        download(downloadUrl, filepath.Join(targetDir, filename))
+        download(fileurl, target_dir.join(filename).to_str().unwrap());
     }
 
     println!("Download complete, target directory: {}", dir);
+}
+
+fn download(fileurl: String, filepath: &str) {
+    let path = Path::new(filepath);
+    if path.exists() {
+        println!("File exists: {}", filepath);
+        return;
+    }
+
+    let mut file = File::create(filepath);
+    if file.is_err() {
+        println!("Create file failed: {:?}", file.err());
+        return;
+    }
+
+    let mut remote = reqwest::get(&fileurl);
+    if remote.is_err() {
+        println!("Send request failed: {}", fileurl);
+        return;
+    }
+
+    let result = std::io::copy(&mut remote.unwrap(), &mut file.unwrap());
+    if result.is_err() {
+        println!("Save file failed: {:?}", result.err());
+        return;
+    }
 }
