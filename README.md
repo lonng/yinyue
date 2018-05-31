@@ -1,5 +1,13 @@
 MP3/MP4 downloader for https://music.163.com
 
+## Build
+```bash
+cargo build
+```
+
+## Usage
+Pending
+
 ## Example
 
 ```bash
