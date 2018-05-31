@@ -5,3 +5,12 @@ authors = ["Chris Lonng <chris@lonng.org>"]
 
 [dependencies]
 url = "1.7.0"
+reqwest = "0.8.5"
+serde_json = "1.0"
+rust-crypto = "^0.2"
+base64 = "0.9.1"
+rand = "0.5.0"
+num-bigint = "0.2"
+rustc-serialize = "0.3.24"
+serde_derive = "1.0.64"
+serde = "1.0.64"
