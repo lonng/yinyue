@@ -30,6 +30,28 @@ pub struct Song {
     al: Album,
 }
 
+impl Song {
+    pub fn artist(&self) -> String {
+        self.ar.iter().map(|ref x|x.name.clone()).collect::<Vec<String>>().join(" & ")
+    }
+
+    pub fn file_name(&self, format: &str) -> String {
+        format.replace("$name", self.name.as_str())
+            .replace("$artist", self.artist().as_str())
+            .replace("$album", self.al.name.as_str())
+    }
+}
+
+impl ToString for Song {
+    fn to_string(&self) -> String {
+        format!("ID: {}, Name: {}, Artist: {}, Album: {}",
+                self.id,
+                self.name.as_str(),
+                self.artist().as_str(),
+                self.al.name.as_str())
+    }
+}
+
 pub trait Adapter {
     fn song_list(&self) -> Result<Vec<Song>, APIError>;
 }
