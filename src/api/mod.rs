@@ -1,12 +1,13 @@
-pub mod crypto;
-
-use std::collections::HashMap;
-use reqwest::header;
-use url;
-use reqwest::Client;
-use serde_json;
-use rand::{thread_rng, Rng};
 use base64;
+use rand::{Rng, thread_rng};
+use regex::Regex;
+use reqwest;
+use reqwest::{Client, Url};
+use reqwest::header;
+use serde_json;
+use std::collections::HashMap;
+
+pub mod crypto;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Artist {
@@ -18,7 +19,6 @@ pub struct Artist {
 pub struct Album {
     id: i32,
     name: String,
-    picUrl: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,16 +59,20 @@ fn create_secret_key(size: usize) -> String {
 }
 
 pub fn parse_adapter(rawurl: &str) -> Result<Box<Adapter>, APIError> {
-    let result = url::Url::parse(rawurl);
+    let repl = rawurl.replace("/#/", "/");
+    let rawurl = repl.as_str();
+    let result = Url::parse(rawurl);
     if result.is_err() {
         return Err(APIError::UrlParseError);
     }
 
     let url_data = result.unwrap();
     let path = url_data.path();
+
     let slash_index = path.rfind("/").unwrap();
     let adapter_name = &path[(slash_index + 1)..];
     let hash_query: HashMap<_, _> = url_data.query_pairs().into_owned().collect();
+
     let id = hash_query.get("id");
     if id.is_none() {
         return Err(APIError::InvalidUrl);
@@ -85,13 +89,60 @@ pub fn parse_adapter(rawurl: &str) -> Result<Box<Adapter>, APIError> {
     }
 }
 
+fn header() -> header::Headers {
+    let mut headers = header::Headers::new();
+    headers.set(header::Host::new("music.163.com", None));
+    headers.set(header::Origin::new("http", "music.163.com", None));
+    headers.set(header::Referer::new("http://music.163.com/"));
+    headers.set(header::UserAgent::new("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.99 Safari/537.36"));
+    headers
+}
+
+fn post(url: &str, payload: String) -> Result<String, reqwest::Error> {
+    let client = Client::builder()
+        .gzip(true)
+        .default_headers(header()).build()?;
+
+    let params1 = crypto::aes_encrypt(payload, NONCE);
+    let key = create_secret_key(16);
+    let params2 = crypto::aes_encrypt(base64::encode(&params1), key.as_str());
+    let params = base64::encode(&params2);
+    let enc_sec_key = crypto::encrypt(key.as_str(), PUB_KEY, MODULUS);
+
+    let form = [
+        ("params", params),
+        ("encSecKey", enc_sec_key)
+    ];
+
+    let mut result = client.post(url).form(&form).send()?;
+    result.text()
+}
+
 struct SongAdapter {
     id: String
 }
 
 impl Adapter for SongAdapter {
     fn song_list(&self) -> Result<Vec<Song>, APIError> {
-        unimplemented!()
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Response {
+            code: i32,
+            songs: Vec<Song>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            msg: Option<String>,
+        }
+
+        let reqtext = json!({
+            "c": format!("[{{id:{}}}]", self.id),
+            "ids": vec![&self.id],
+        });
+
+        println!("{}", reqtext.to_string());
+
+        let body = post("http://music.163.com/weapi/v3/song/detail?csrf_token=", reqtext.to_string()).unwrap();
+        let resp: Response = serde_json::from_str(body.as_str()).unwrap();
+
+        Ok(resp.songs)
     }
 }
 
@@ -101,31 +152,6 @@ struct PlaylistAdapter {
 
 impl Adapter for PlaylistAdapter {
     fn song_list(&self) -> Result<Vec<Song>, APIError> {
-        let mut headers = header::Headers::new();
-        headers.set(header::Host::new("music.163.com", None));
-        headers.set(header::Origin::new("http", "music.163.com", None));
-        headers.set(header::Referer::new("http://music.163.com/"));
-        headers.set(header::UserAgent::new("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.99 Safari/537.36"));
-
-        let client = Client::builder().default_headers(headers).build().unwrap();
-
-        let reqtext = json!({
-            "csrf_token":"",
-            "id": self.id,
-            "n": 1000,
-        });
-
-        let params1 = crypto::aes_encrypt(reqtext.to_string(), NONCE);
-        let key = create_secret_key(16);
-        let params2 = crypto::aes_encrypt(base64::encode(&params1), key.as_str());
-        let params = base64::encode(&params2);
-        let enc_sec_key = crypto::encrypt(key.as_str(), PUB_KEY, MODULUS);
-
-        let form = [
-            ("params", params),
-            ("encSecKey", enc_sec_key)
-        ];
-
         #[derive(Debug, Serialize, Deserialize)]
         struct PlayList {
             tracks: Vec<Song>
@@ -135,14 +161,19 @@ impl Adapter for PlaylistAdapter {
         struct Response {
             code: i32,
             playlist: PlayList,
-            #[serde(skip_serializing_if="Option::is_none")]
+            #[serde(skip_serializing_if = "Option::is_none")]
             msg: Option<String>,
         }
 
-        let mut result = client.post("http://music.163.com/weapi/v3/playlist/detail?csrf_token=").form(&form).send().unwrap();
+        let reqtext = json!({
+            "csrf_token":"",
+            "id": self.id,
+            "n": 1000,
+        });
 
-        let body = result.text().unwrap();
+        let body = post("http://music.163.com/weapi/v3/playlist/detail?csrf_token=", reqtext.to_string()).unwrap();
         let resp: Response = serde_json::from_str(body.as_str()).unwrap();
+
         Ok(resp.playlist.tracks)
     }
 }
@@ -153,7 +184,23 @@ struct AlbumAdapter {
 
 impl Adapter for AlbumAdapter {
     fn song_list(&self) -> Result<Vec<Song>, APIError> {
-        unimplemented!()
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Response {
+            code: i32,
+            songs: Vec<Song>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            msg: Option<String>,
+        }
+
+        let reqtext = json!({
+            "csrf_token":"",
+        });
+
+        let url = format!("http://music.163.com/weapi/v1/album/{}?csrf_token=", self.id);
+        let body = post(url.as_str(), reqtext.to_string()).unwrap();
+        let resp: Response = serde_json::from_str(body.as_str()).unwrap();
+
+        Ok(resp.songs)
     }
 }
 
@@ -164,6 +211,42 @@ struct CommonAdapter {
 
 impl Adapter for CommonAdapter {
     fn song_list(&self) -> Result<Vec<Song>, APIError> {
-        unimplemented!()
+        let client = Client::builder()
+            .gzip(true)
+            .default_headers(header()).build().unwrap();
+
+        let url = format!("{}?id={}", self.url, self.id);
+        let mut response = client.get(url.as_str()).send().unwrap();
+        let text = response.text().unwrap();
+        let body = text.as_str();
+
+        let matcher = Regex::new("href=\"/song\\?id=(?P<id>\\d*)\"").unwrap();
+        let iter = matcher.captures_iter(body);
+        let mut ids = Vec::<String>::new();
+        for mat in iter {
+            ids.push(mat["id"].to_string());
+        }
+
+        if ids.len() < 1 {
+            return Ok(vec![]);
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Response {
+            code: i32,
+            songs: Vec<Song>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            msg: Option<String>,
+        }
+
+        let reqtext = json!({
+            "ids": ids,
+            "c": ids.into_iter().map(|x|format!("{{id:{}}}", x)).collect::<Vec<String>>(),
+        });
+
+        let body = post("http://music.163.com/weapi/v3/song/detail?csrf_token=", reqtext.to_string()).unwrap();
+        let resp: Response = serde_json::from_str(body.as_str()).unwrap();
+
+        Ok(resp.songs)
     }
 }
