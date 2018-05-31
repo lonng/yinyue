@@ -82,11 +82,42 @@ fn main() {
     println!("Starting fetch song list from: {}", url);
     let adapter = api::parse_adapter(url.as_str()).unwrap();
     let song_list = adapter.song_list().unwrap();
+    let total = song_list.len();
+    println!("Fetching song list completed, total amount: {}", total);
 
-    println!("Fetching song list completed, total amount: {}", song_list.len());
-
-    for song in song_list {
+    for (i, song) in song_list.iter().enumerate() {
         println!("Parse song download info: {}", song.to_string());
+        let download_url = match typ.as_str() {
+            "mp3" => api::mp3_info(song.id(), qua.as_str()),
+            "mv" => {
+                let mv = song.mv();
+                if mv > 0 {
+                    api::mv_info(song.mv(), qua.as_str())
+                }else {
+                    None
+                }
+            },
+            _ => unreachable!()
+        };
+
+        if download_url.is_none() {
+            continue;
+        }
+
+        let fileurl = download_url.unwrap();
+        let extension = match fileurl.rfind(".") {
+            None => {
+                match typ.as_str() {
+                    "mp3" => "mp3".to_string(),
+                    "mv" => "mp4".to_string(),
+                    _ => unreachable!()
+                }
+            },
+            Some(index) => fileurl[index..].to_string()
+        };
+        let filename = format!("{}{}", song.file_name(&fmt),extension);
+        println!("Downloading: [{}/{}]{}", i+1, total, filename);
+//        download(downloadUrl, filepath.Join(targetDir, filename))
     }
 
     println!("Download complete, target directory: {}", dir);

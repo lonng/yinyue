@@ -31,8 +31,16 @@ pub struct Song {
 }
 
 impl Song {
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+
+    pub fn mv(&self) -> i32 {
+        self.mv
+    }
+
     pub fn artist(&self) -> String {
-        self.ar.iter().map(|ref x|x.name.clone()).collect::<Vec<String>>().join(" & ")
+        self.ar.iter().map(|ref x| x.name.clone()).collect::<Vec<String>>().join(" & ")
     }
 
     pub fn file_name(&self, format: &str) -> String {
@@ -140,6 +148,88 @@ fn post(url: &str, payload: String) -> Result<String, reqwest::Error> {
     result.text()
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MP3Info {
+    url: String,
+    size: i32,
+}
+
+pub fn mp3_info(id: i32, r: &str) -> Option<String> {
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Response {
+        code: i32,
+        data: Vec<MP3Info>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        msg: Option<String>,
+    }
+
+    let req = json!({
+        "br": r,
+        "ids": format!("[{}]", id)
+    });
+
+    let result = post("http://music.163.com/weapi/song/enhance/player/url?csrf_token=",
+                      req.to_string());
+    if result.is_err() {
+        return None;
+    }
+
+    let body = result.unwrap();
+    let des = serde_json::from_str(body.as_str());
+    if des.is_err() {
+        return None;
+    }
+    let resp: Response = des.unwrap();
+
+    if resp.data.len() < 1 || resp.data[0].url.len() == 0 {
+        return None;
+    }
+
+    Some(resp.data[0].clone().url)
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MVInfo {
+    url: String,
+    size: i32,
+}
+
+pub fn mv_info(id: i32, r: &str) -> Option<String> {
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Response {
+        code: i32,
+        data: MVInfo,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        msg: Option<String>,
+    }
+
+    let req = json!({
+        "csrf_token": "",
+        "r": r,
+        "id": id
+    });
+
+    let result = post("http://music.163.com/weapi/song/enhance/play/mv/url?csrf_token=",
+                      req.to_string());
+    if result.is_err() {
+        return None;
+    }
+
+    let body = result.unwrap();
+    let des: Result<Response, _> = serde_json::from_str(body.as_str());
+    if des.is_err() {
+        return None;
+    }
+    let resp: Response = des.unwrap();
+
+    if resp.data.url.len() == 0 {
+        return None;
+    }
+
+    Some(resp.data.url)
+}
+
 struct SongAdapter {
     id: String
 }
@@ -158,8 +248,6 @@ impl Adapter for SongAdapter {
             "c": format!("[{{id:{}}}]", self.id),
             "ids": vec![&self.id],
         });
-
-        println!("{}", reqtext.to_string());
 
         let body = post("http://music.163.com/weapi/v3/song/detail?csrf_token=", reqtext.to_string()).unwrap();
         let resp: Response = serde_json::from_str(body.as_str()).unwrap();
