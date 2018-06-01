@@ -30,7 +30,7 @@ pub fn aes_encrypt(data: String, key: &str) -> Vec<u8> {
 }
 
 
-pub fn encrypt(text: &str, exponent: &str, modulus: &str) -> String {
+pub fn encrypt(text: &str, exponent: &str, modulus: &str) -> Option<String> {
     let mut rev = Vec::<u8>::new();
     for byt in text.as_bytes() {
         rev.push(*byt);
@@ -38,25 +38,10 @@ pub fn encrypt(text: &str, exponent: &str, modulus: &str) -> String {
     rev.reverse();
 
     let radix = 16;
-    let bi_text = BigInt::parse_bytes(rev.to_hex().as_bytes(), radix);
-    if bi_text.is_none() {
-        panic!("invalid")
-    }
+    let bi_text = BigInt::parse_bytes(rev.to_hex().as_bytes(), radix)?;
+    let bi_exp = BigInt::parse_bytes(exponent.as_bytes(), radix)?;
+    let bi_mod = BigInt::parse_bytes(modulus.as_bytes(), radix)?;
+    let bi_ret = bi_text.modpow(&bi_exp, &bi_mod);
 
-    let bi_ex = BigInt::parse_bytes(exponent.as_bytes(), radix);
-    if bi_ex.is_none() {
-        panic!("invalid")
-    }
-
-    let bi_mod = BigInt::parse_bytes(modulus.as_bytes(), radix);
-    if bi_mod.is_none() {
-        panic!("invalid")
-    }
-
-    let exp = bi_ex.unwrap();
-    let mo = bi_mod.unwrap();
-    let text = bi_text.unwrap();
-
-    let bi_ret = text.modpow(&exp, &mo);
-    bi_ret.to_str_radix(radix)
+    Some(bi_ret.to_str_radix(radix))
 }

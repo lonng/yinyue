@@ -69,7 +69,8 @@ pub enum APIError {
     UrlParseError,
     InvalidUrl,
     AdapterNotFound,
-    HttpError(String),
+    Encrypt,
+    Reqwest(reqwest::Error),
 }
 
 
@@ -128,7 +129,13 @@ fn header() -> header::Headers {
     headers
 }
 
-fn post(url: &str, payload: String) -> Result<String, reqwest::Error> {
+impl From<reqwest::Error> for APIError {
+    fn from(e: reqwest::Error) -> Self {
+        APIError::Reqwest(e)
+    }
+}
+
+fn post(url: &str, payload: String) -> Result<String, APIError> {
     let client = Client::builder()
         .gzip(true)
         .default_headers(header()).build()?;
@@ -137,7 +144,10 @@ fn post(url: &str, payload: String) -> Result<String, reqwest::Error> {
     let key = create_secret_key(16);
     let params2 = crypto::aes_encrypt(base64::encode(&params1), key.as_str());
     let params = base64::encode(&params2);
-    let enc_sec_key = crypto::encrypt(key.as_str(), PUB_KEY, MODULUS);
+    let enc_sec_key = match crypto::encrypt(key.as_str(), PUB_KEY, MODULUS) {
+        Some(key) => key,
+        None => return Err(APIError::Encrypt)
+    };
 
     let form = [
         ("params", params),
@@ -145,7 +155,9 @@ fn post(url: &str, payload: String) -> Result<String, reqwest::Error> {
     ];
 
     let mut result = client.post(url).form(&form).send()?;
-    result.text()
+    let body = result.text()?;
+
+    Ok(body)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
