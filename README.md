@@ -1,13 +1,13 @@
 网易云音乐批量下载，支持下载mp3和mv，支持歌单，专辑，歌手热门，电台，单曲，排行榜
 
-```
+
 - http://music.163.com/playlist?id=892177597
 - http://music.163.com/#/album?id=38595209"
 - http://music.163.com/#/song?id=557584888
 - http://music.163.com/#/artist?id=10559"
 - http://music.163.com/#/discover/toplist?id=3779629
 - http://music.163.com/#/djradio?id=527162580
-```
+
 
 ## Build
 ```bash
@@ -15,7 +15,7 @@ cargo build --release
 ```
 
 ## Usage
-```
+```ignore
 Usage: target/release/yinyue [options] url
 
 Options:
@@ -43,12 +43,12 @@ Options:
 
 ## Example
 
-```
+```shell
 yinyue -t mv http://music.163.com/playlist?id=892177597
 ```
 
 Support for:
-```bash
+```ignore
 http://music.163.com/song?id=$reource_id
 http://music.163.com/playlist?id=$reource_id
 http://music.163.com/album?id=$reource_id
