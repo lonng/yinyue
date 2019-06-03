@@ -94,28 +94,24 @@ fn run(matches: &Matches) -> Result<()> {
         info!("Parse song download info: {}", song.to_string());
         let download_url = match typ.as_str() {
             "mp3" => api::mp3_info(song.id(), qua.as_str()),
-            "mv" => {
-                let mv = song.mv();
-                if mv > 0 {
-                    api::mv_info(song.mv(), qua.as_str())
-                } else {
-                    None
-                }
-            }
+            "mv" => api::mv_info(song.mv(), qua.as_str()),
             _ => unreachable!(),
         };
 
-        let fileurl = match download_url {
-            Some(url) => url,
-            None => continue,
+        let download_url = match download_url {
+            Ok(url) => url,
+            Err(err) => {
+                error!("Parse download URL failed: {}", err);
+                continue;
+            }
         };
-        let extension = match fileurl.rfind(".") {
+        let extension = match download_url.rfind(".") {
             None => typ.as_str(),
-            Some(index) => &fileurl[index..],
+            Some(index) => &download_url[index..],
         };
         let filename = format!("{}{}", song.file_name(&fmt), extension);
         info!("Downloading: [{}/{}]{}]", i + 1, total, filename);
-        match api::download(fileurl, target_dir.join(filename).to_str().unwrap()) {
+        match api::download(download_url, target_dir.join(filename).to_str().unwrap()) {
             Ok(_) => {}
             Err(err) => error!("Download file failed: {:?}", err),
         }

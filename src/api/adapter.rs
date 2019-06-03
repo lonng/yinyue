@@ -28,6 +28,7 @@ fn create_secret_key(size: usize) -> String {
         let index = rng.gen_range(0, SECRET_KEY.len());
         key.push(SECRET_KEY.as_bytes()[index]);
     }
+    // It's OK the unwrap here because of all characters are alphabetic and numeric
     String::from_utf8(key).unwrap()
 }
 
@@ -53,38 +54,43 @@ fn create_secret_key(size: usize) -> String {
 /// http://music.163.com/#/song?id=557584888
 /// http://music.163.com/#/artist?id=10559
 /// ```
-pub fn parse_adapter(rawurl: &str) -> Result<Box<Adapter>> {
-    let repl = rawurl.replace("/#/", "/");
+pub fn parse_adapter(url: &str) -> Result<Box<Adapter>> {
+    let repl = url.replace("/#/", "/");
     let url_data = Url::parse(&repl)?;
     let path = url_data.path();
 
     // Retrieve class and id from URL
     let slash_index = match path.rfind("/") {
         Some(index) => index,
-        None => return Err(Error::InvalidUrl(rawurl.to_owned())),
+        None => return Err(Error::InvalidUrl(url.to_owned())),
     };
     let adapter_name = &path[(slash_index + 1)..];
-    let queries: HashMap<_, _> = url_data.query_pairs().into_owned().collect();
+    let queries = url_data
+        .query_pairs()
+        .into_owned()
+        .collect::<HashMap<_, _>>();
     let id = match queries.get("id") {
         Some(id) => id.to_owned(),
-        None => return Err(Error::InvalidUrl(rawurl.to_owned())),
+        None => return Err(Error::InvalidUrl(url.to_owned())),
     };
 
+    // Downgrade to `CommonAdapter` if there is not special adapter for this URL
+    // The `CommonAdapter` use regexp to match song lists
     match adapter_name {
         "song" => Ok(Box::new(SongAdapter { id })),
         "playlist" => Ok(Box::new(PlaylistAdapter { id })),
         "album" => Ok(Box::new(AlbumAdapter { id })),
         "artist" => Ok(Box::new(CommonAdapter {
             id,
-            url: "http://music.163.com/artist".to_owned(),
+            url: "http://music.163.com/artist",
         })),
         "toplist" => Ok(Box::new(CommonAdapter {
             id,
-            url: "http://music.163.com/discover/toplist".to_owned(),
+            url: "http://music.163.com/discover/toplist",
         })),
         "djradio" => Ok(Box::new(CommonAdapter {
             id,
-            url: "http://music.163.com/djradio".to_owned(),
+            url: "http://music.163.com/djradio",
         })),
         _ => Err(Error::AdapterNotFound(adapter_name.to_owned())),
     }
@@ -134,7 +140,7 @@ struct MP3Info {
     size: i32,
 }
 
-pub fn mp3_info(id: i32, r: &str) -> Option<String> {
+pub fn mp3_info(id: i32, r: &str) -> Result<String> {
     #[derive(Debug, Serialize, Deserialize)]
     struct Response {
         code: i32,
@@ -148,26 +154,16 @@ pub fn mp3_info(id: i32, r: &str) -> Option<String> {
         "ids": format!("[{}]", id)
     });
 
-    let result = post(
+    let body = post(
         "http://music.163.com/weapi/song/enhance/player/url?csrf_token=",
         req.to_string(),
-    );
-    if result.is_err() {
-        return None;
-    }
+    )?;
 
-    let body = result.unwrap();
-    let des = serde_json::from_str(body.as_str());
-    if des.is_err() {
-        return None;
-    }
-    let resp: Response = des.unwrap();
-
+    let resp = serde_json::from_str::<'_, Response>(body.as_str())?;
     if resp.data.len() < 1 || resp.data[0].url.len() == 0 {
-        return None;
+        return Err(Error::EmptyResponse);
     }
-
-    Some(resp.data[0].clone().url)
+    Ok(resp.data[0].clone().url)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,7 +172,10 @@ struct MVInfo {
     size: i32,
 }
 
-pub fn mv_info(id: i32, r: &str) -> Option<String> {
+pub fn mv_info(id: i32, r: &str) -> Result<String> {
+    if id == 0 {
+        return Err(Error::MvNotFound);
+    }
     #[derive(Debug, Serialize, Deserialize)]
     struct Response {
         code: i32,
@@ -191,25 +190,15 @@ pub fn mv_info(id: i32, r: &str) -> Option<String> {
         "id": id
     });
 
-    let result = post(
+    let body = post(
         "http://music.163.com/weapi/song/enhance/play/mv/url?csrf_token=",
         req.to_string(),
-    );
-    if result.is_err() {
-        return None;
-    }
-
-    let body = result.unwrap();
-    let resp: Response = match serde_json::from_str(body.as_str()) {
-        Ok(x) => x,
-        Err(_) => return None,
-    };
-
+    )?;
+    let resp = serde_json::from_str::<'_, Response>(body.as_str())?;
     if resp.data.url.len() == 0 {
-        return None;
+        return Err(Error::EmptyResponse);
     }
-
-    Some(resp.data.url)
+    Ok(resp.data.url)
 }
 
 struct SongAdapter {
@@ -309,7 +298,7 @@ impl Adapter for AlbumAdapter {
 
 struct CommonAdapter {
     id: String,
-    url: String,
+    url: &'static str,
 }
 
 impl Adapter for CommonAdapter {

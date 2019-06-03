@@ -27,6 +27,12 @@ pub enum Error {
     Download(String),
     #[fail(display = "invalid media type: {}", _0)]
     InvalidType(String),
+    #[fail(display = "empty response")]
+    EmptyResponse,
+    #[fail(display = "mv not found")]
+    MvNotFound,
+    #[fail(display = "serde json failed: {:?}", _0)]
+    SerdeJson(serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -40,6 +46,12 @@ impl From<url::ParseError> for Error {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::Io(e)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::SerdeJson(e)
     }
 }
 
