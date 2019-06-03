@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use getopts::Matches;
 use getopts::Options;
 use std::env;
@@ -5,14 +8,20 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+use simple_logger;
+
 use yinyue::api::{self, Result};
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options] url", program);
-    print!("{}", opts.usage(&brief));
+    println!("{}", opts.usage(&brief));
 }
 
 fn main() {
+    // Initialize the logger
+    simple_logger::init_with_level(log::Level::Info).unwrap();
+
+    // Parse the command line arguments
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
@@ -41,7 +50,7 @@ fn main() {
     }
 
     if let Err(err) = run(&matches) {
-        println!("Error occurred while download: {:?}", err);
+        info!("Error occurred while download: {:?}", err);
     }
 }
 
@@ -64,25 +73,25 @@ fn run(matches: &Matches) -> Result<()> {
         _ => unreachable!(),
     };
 
-    println!("Output directory: {}", dir);
-    println!("File name format: {}", fmt);
-    println!("Media type: {}", typ);
-    println!("Media quality: {}", qua);
+    info!("Output directory: {}", dir);
+    info!("File name format: {}", fmt);
+    info!("Media type: {}", typ);
+    info!("Media quality: {}", qua);
 
     // Create target directory if it is not exists
     if !Path::new(dir.as_str()).exists() {
         fs::create_dir_all(&dir)?;
     }
 
-    println!("Starting fetch song list from: {}", matches.free[0]);
+    info!("Starting fetch song list from: {}", matches.free[0]);
     let adapter = api::parse_adapter(&matches.free[0])?;
     let song_list = adapter.song_list()?;
     let total = song_list.len();
 
-    println!("Fetching song list completed, total amount: {}", total);
+    info!("Fetching song list completed, total amount: {}", total);
     let target_dir = Path::new(&dir);
     for (i, song) in song_list.iter().enumerate() {
-        println!("Parse song download info: {}", song.to_string());
+        info!("Parse song download info: {}", song.to_string());
         let download_url = match typ.as_str() {
             "mp3" => api::mp3_info(song.id(), qua.as_str()),
             "mv" => {
@@ -105,12 +114,12 @@ fn run(matches: &Matches) -> Result<()> {
             Some(index) => &fileurl[index..],
         };
         let filename = format!("{}{}", song.file_name(&fmt), extension);
-        println!("Downloading: [{}/{}]{}]", i + 1, total, filename);
+        info!("Downloading: [{}/{}]{}]", i + 1, total, filename);
         match api::download(fileurl, target_dir.join(filename).to_str().unwrap()) {
             Ok(_) => {}
-            Err(err) => println!("Download file failed: {:?}", err),
+            Err(err) => error!("Download file failed: {:?}", err),
         }
     }
-    println!("Download complete, target directory: {}", dir);
+    info!("Download complete, target directory: {}", dir);
     Ok(())
 }
