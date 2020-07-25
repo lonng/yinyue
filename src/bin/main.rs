@@ -107,7 +107,14 @@ fn run(matches: &Matches) -> Result<()> {
         };
         let extension = match download_url.rfind(".") {
             None => typ.as_str(),
-            Some(index) => &download_url[index..],
+            Some(index) => {
+                // truncate query parameters in URL if any
+                if let Some(i) = download_url.rfind("?") {
+                    &download_url[index..i]
+                } else {
+                    &download_url[index..]
+                }
+            },
         };
         let filename = format!("{}{}", song.file_name(&fmt), extension);
         info!("Downloading: [{}/{}]{}]", i + 1, total, filename);
