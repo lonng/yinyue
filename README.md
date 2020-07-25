@@ -29,6 +29,8 @@ Options:
     -q, --quality       quality(480/720/1080 for mv, 12800/19200/32000 for
                         music)
     -d, --dir           save to target directory
+    -m, --add-metadata  add ID3 metadata like title, artists etc. to file
+    -h, --help          print usage
 ```
 
 ### 参数解释
@@ -44,6 +46,8 @@ Options:
       
     -d, --dir
       文件保存路径，如果路径不存在，会自动创建，默认为music
+    -m, --add-metadata
+      下载文件后写入ID3元数据（歌名，歌手名，专辑名）
 ```
 
 ## Example
