@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::Path;
 
 use failure::Fail;
+use id3::{Tag, Version};
 use reqwest;
 
 mod adapter;
@@ -33,6 +34,8 @@ pub enum Error {
     MvNotFound,
     #[fail(display = "serde json failed: {:?}", _0)]
     SerdeJson(serde_json::Error),
+    #[fail(display = "metadata error: {:?}", _0)]
+    MetadataError(id3::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -46,6 +49,12 @@ impl From<url::ParseError> for Error {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::Io(e)
+    }
+}
+
+impl From<id3::Error> for Error {
+    fn from(e: id3::Error) -> Self {
+        Error::MetadataError(e)
     }
 }
 
@@ -85,19 +94,19 @@ impl Song {
         self.mv
     }
 
-    pub fn artist(&self) -> String {
+    pub fn file_name(&self, format: &str) -> String {
+        format
+            .replace("$name", self.name.as_str())
+            .replace("$artist", self.joined_artist_names(" & ").as_str())
+            .replace("$album", self.al.name.as_str())
+    }
+
+    pub fn joined_artist_names(&self, separator: &str) -> String {
         self.ar
             .iter()
             .map(|ref x| x.name.clone())
             .collect::<Vec<String>>()
-            .join(" & ")
-    }
-
-    pub fn file_name(&self, format: &str) -> String {
-        format
-            .replace("$name", self.name.as_str())
-            .replace("$artist", self.artist().as_str())
-            .replace("$album", self.al.name.as_str())
+            .join(separator)
     }
 }
 
@@ -107,10 +116,20 @@ impl ToString for Song {
             "ID: {}, Name: {}, Artist: {}, Album: {}",
             self.id,
             self.name.as_str(),
-            self.artist().as_str(),
+            self.joined_artist_names(" & ").as_str(),
             self.al.name.as_str()
         )
     }
+}
+
+pub fn add_metadata(song: &Song, filepath: &str) -> Result<()> {
+    let mut tag = Tag::new();
+    tag.set_artist(song.joined_artist_names("/"));
+    tag.set_title(song.name.clone());
+    tag.set_album(song.al.name.clone());
+
+    tag.write_to_path(filepath, Version::Id3v24)?;
+    Ok(())
 }
 
 pub fn download(fileurl: String, filepath: &str) -> Result<()> {

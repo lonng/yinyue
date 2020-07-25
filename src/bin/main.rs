@@ -35,6 +35,11 @@ fn main() {
         "",
     );
     opts.optopt("d", "dir", "save to target directory", "");
+    opts.optflag(
+        "m",
+        "add-metadata",
+        "add ID3 metadata like title, artists etc. to file",
+    );
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -50,7 +55,7 @@ fn main() {
     }
 
     if let Err(err) = run(&matches) {
-        info!("Error occurred while download: {:?}", err);
+        info!("Error occurred during download: {:?}", err);
     }
 }
 
@@ -111,9 +116,26 @@ fn run(matches: &Matches) -> Result<()> {
         };
         let filename = format!("{}{}", song.file_name(&fmt), extension);
         info!("Downloading: [{}/{}]{}]", i + 1, total, filename);
-        match api::download(download_url, target_dir.join(filename).to_str().unwrap()) {
-            Ok(_) => {}
-            Err(err) => error!("Download file failed: {:?}", err),
+        let path = target_dir.join(filename);
+        let path_str = path.to_str().unwrap();
+        match api::download(download_url, path_str) {
+            Ok(_) => (),
+            Err(err) => {
+                error!("Download file failed: {:?}", err);
+                continue;
+            }
+        }
+        if matches.opt_present("m") {
+            match api::add_metadata(song, path_str) {
+                Ok(_) => {
+                    info!("Added metadata tags");
+                    ()
+                }
+                Err(err) => {
+                    error!("Adding metadata tags failed: {}", err);
+                    continue;
+                }
+            };
         }
     }
     info!("Download complete, target directory: {}", dir);
