@@ -54,7 +54,7 @@ fn create_secret_key(size: usize) -> String {
 /// http://music.163.com/#/song?id=557584888
 /// http://music.163.com/#/artist?id=10559
 /// ```
-pub fn parse_adapter(url: &str) -> Result<Box<Adapter>> {
+pub fn parse_adapter(url: &str) -> Result<Box<dyn Adapter>> {
     let repl = url.replace("/#/", "/");
     let url_data = Url::parse(&repl)?;
     let path = url_data.path();
